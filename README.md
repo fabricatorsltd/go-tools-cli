@@ -173,5 +173,5 @@ go run .
 
 ## Contributing
 
-This tool is part of the [go-tools](https://github.com/mirkobrombin/go-tools) monorepo.
+This tool is part of the [go-tools](https://go-tools.fabricators.ltd) ecosystem.
 Issues and PRs welcome at [fabricatorsltd/go-tools-cli](https://github.com/fabricatorsltd/go-tools-cli).
