@@ -60,7 +60,7 @@ func (c *InitCmd) Run() error {
 		return fmt.Errorf("generation failed: %w", err)
 	}
 
-	fmt.Println("\n✓ Project scaffolded successfully!\n")
+	fmt.Print("\n✓ Project scaffolded successfully!\n\n")
 	fmt.Println("Created files:")
 	for _, f := range files {
 		fmt.Printf("  • %s\n", f)
