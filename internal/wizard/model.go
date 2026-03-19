@@ -9,6 +9,45 @@ import (
 	"github.com/fabricatorsltd/go-tools-cli/internal/catalog"
 )
 
+// Prefill holds values passed via CLI flags that skip wizard steps.
+type Prefill struct {
+	ProjectName string // --name / -n
+	ModulePath  string // --module / -m
+	PresetName  string // --preset / -p  (alias: api, worker, fullstack, minimal)
+	Depth       string // --depth / -d   (alias: minimal, boilerplate, full)
+}
+
+func resolvePresetIndex(name string) (int, bool) {
+	aliases := map[string]int{
+		"api": 0, "api server": 0,
+		"worker": 1, "worker service": 1,
+		"fullstack": 2, "full-stack": 2, "full stack": 2,
+		"minimal": 3,
+	}
+	if i, ok := aliases[strings.ToLower(strings.TrimSpace(name))]; ok {
+		return i, true
+	}
+	// fallback: match by prefix against preset names
+	for i, p := range catalog.Presets {
+		if strings.HasPrefix(strings.ToLower(p.Name), strings.ToLower(name)) {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+func resolveDepth(name string) (OutputDepth, bool) {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "minimal", "min":
+		return DepthMinimal, true
+	case "boilerplate", "bp":
+		return DepthBoilerplate, true
+	case "full", "full example":
+		return DepthFull, true
+	}
+	return DepthMinimal, false
+}
+
 type Model struct {
 	currentStep int
 	Done        bool
@@ -53,7 +92,7 @@ type Config struct {
 	OutputDir       string
 }
 
-func NewModel(outputDir string) Model {
+func NewModel(outputDir string, pre Prefill) Model {
 	ti0 := textinput.New()
 	ti0.Placeholder = "my-app"
 	ti0.Focus()
@@ -65,7 +104,7 @@ func NewModel(outputDir string) Model {
 	ti1.CharLimit = 128
 	ti1.Width = 60
 
-	return Model{
+	m := Model{
 		Config: Config{
 			OutputDir:     outputDir,
 			ModuleOptions: make(map[string]map[string]string),
@@ -73,6 +112,70 @@ func NewModel(outputDir string) Model {
 		textInputs:    [2]textinput.Model{ti0, ti1},
 		moduleCursors: make(map[int]struct{}),
 	}
+
+	// Apply prefill values and advance past completed steps.
+	presetSet := false
+	depthSet := false
+
+	if pre.ProjectName != "" {
+		m.Config.ProjectName = pre.ProjectName
+		m.textInputs[0].SetValue(pre.ProjectName)
+	}
+	if pre.ModulePath != "" {
+		m.Config.ModulePath = pre.ModulePath
+		m.textInputs[1].SetValue(pre.ModulePath)
+	}
+	if pre.PresetName != "" {
+		if idx, ok := resolvePresetIndex(pre.PresetName); ok {
+			m.Config.PresetIndex = idx
+			m = applyPreset(m, idx)
+			presetSet = true
+		}
+	}
+	if pre.Depth != "" {
+		if d, ok := resolveDepth(pre.Depth); ok {
+			m.Config.OutputDepth = d
+			m.depthCursor = int(d)
+			depthSet = true
+		}
+	}
+
+	// Advance currentStep past all pre-filled steps.
+	for {
+		switch m.currentStep {
+		case StepProjectName:
+			if m.Config.ProjectName != "" {
+				m.currentStep++
+				continue
+			}
+		case StepModulePath:
+			if m.Config.ModulePath != "" {
+				m.currentStep++
+				continue
+			}
+		case StepPreset:
+			if presetSet {
+				m.currentStep++
+				continue
+			}
+		case StepOutputDepth:
+			if depthSet {
+				m.currentStep = StepConfirm
+				continue
+			}
+		}
+		break
+	}
+
+	// Focus the right text input if we're on a text step.
+	if m.currentStep == StepProjectName {
+		m.textInputs[0].Focus()
+	} else if m.currentStep == StepModulePath {
+		m.textInputs[0].Blur()
+		m.textInputs[1].Focus()
+	}
+
+	return m
 }
 
 func (m Model) Init() tea.Cmd {
@@ -160,25 +263,29 @@ func (m Model) handlePresetSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case tea.KeyEnter:
 		m.Config.PresetIndex = m.presetCursor
-		preset := catalog.Presets[m.presetCursor]
-		// Build module list from all modules
-		m.moduleList = make([]catalog.Module, 0, len(catalog.Modules))
-		for _, mod := range catalog.Modules {
-			m.moduleList = append(m.moduleList, mod)
-		}
-		// Pre-select preset modules
-		m.moduleCursors = make(map[int]struct{})
-		for i, mod := range m.moduleList {
-			for _, pmod := range preset.Modules {
-				if mod.Name == pmod {
-					m.moduleCursors[i] = struct{}{}
-					break
-				}
-			}
-		}
+		m = applyPreset(m, m.presetCursor)
 		m.currentStep++
 	}
 	return m, nil
+}
+
+// applyPreset populates moduleList and pre-selects modules for the given preset index.
+func applyPreset(m Model, idx int) Model {
+	preset := catalog.Presets[idx]
+	m.moduleList = make([]catalog.Module, 0, len(catalog.Modules))
+	for _, mod := range catalog.Modules {
+		m.moduleList = append(m.moduleList, mod)
+	}
+	m.moduleCursors = make(map[int]struct{})
+	for i, mod := range m.moduleList {
+		for _, pmod := range preset.Modules {
+			if mod.Name == pmod {
+				m.moduleCursors[i] = struct{}{}
+				break
+			}
+		}
+	}
+	return m
 }
 
 func (m Model) handleModuleSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {

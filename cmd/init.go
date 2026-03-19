@@ -16,11 +16,13 @@ type RootCmd struct {
 	Init InitCmd `cmd:"init" help:"Initialize a new go-tools project"`
 }
 
-func (r *RootCmd) Run() error { return nil }
-
 type InitCmd struct {
 	cli.Base
 	Output string `cli:"output,o" help:"Output directory for the new project" default:"."`
+	Name   string `cli:"name,n"   help:"Project name (skips interactive prompt)"`
+	Module string `cli:"module,m" help:"Go module path, e.g. github.com/user/app (skips interactive prompt)"`
+	Preset string `cli:"preset,p" help:"Preset: api, worker, fullstack, minimal (skips preset selection)"`
+	Depth  string `cli:"depth,d"  help:"Output depth: minimal, boilerplate, full (skips depth selection)"`
 }
 
 func (c *InitCmd) Run() error {
@@ -32,7 +34,14 @@ func (c *InitCmd) Run() error {
 		return fmt.Errorf("cannot create output dir: %w", err)
 	}
 
-	m := wizard.NewModel(absOut)
+	pre := wizard.Prefill{
+		ProjectName: c.Name,
+		ModulePath:  c.Module,
+		PresetName:  c.Preset,
+		Depth:       c.Depth,
+	}
+
+	m := wizard.NewModel(absOut, pre)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	result, err := p.Run()
 	if err != nil {

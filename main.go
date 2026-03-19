@@ -9,8 +9,14 @@ import (
 )
 
 func main() {
-	app := &cmd.RootCmd{}
-	if err := cli.Run(app); err != nil {
+	app, err := cli.New(&cmd.RootCmd{})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	app.SetName("go-tools-cli")
+	app.RootNode.Description = "Bootstrap new Go projects using the go-tools ecosystem.\nRun a subcommand to get started, or pass --help to any command."
+	if err := app.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
