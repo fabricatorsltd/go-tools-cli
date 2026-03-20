@@ -298,8 +298,16 @@ func (m Model) handleModuleSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.moduleListCursor < len(m.moduleList)-1 {
 			m.moduleListCursor++
 		}
+	case tea.KeySpace:
+		// Toggle selection for current module - handle KeySpace explicitly for Mac compatibility
+		if _, ok := m.moduleCursors[m.moduleListCursor]; ok {
+			delete(m.moduleCursors, m.moduleListCursor)
+		} else {
+			m.moduleCursors[m.moduleListCursor] = struct{}{}
+		}
 	case tea.KeyRunes:
 		if msg.String() == " " {
+			// Fallback for platforms where space is treated as rune
 			if _, ok := m.moduleCursors[m.moduleListCursor]; ok {
 				delete(m.moduleCursors, m.moduleListCursor)
 			} else {
